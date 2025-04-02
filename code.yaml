@@ -1,0 +1,94 @@
+# MARK: - ViewModel mis à jour
+ViewModel:
+  MovieViewModel:
+    ObservableObject:
+      Published:
+        movies: []
+        trendingMovies: [] # Films tendances
+        favorites: []
+        watchLater: []
+        searchText: ""
+      AppStorage:
+        isDarkMode: false # Stockage du mode sombre
+      apiKey: "TON_API_KEY_ICI"
+      init:
+        - fetchMovies()
+        - fetchTrendingMovies() # Charge les films tendances
+      fetchMovies:
+        - fetchFromAPI(endpoint: "movie/popular") { movies in
+            self.movies = movies
+          }
+      fetchTrendingMovies:
+        - fetchFromAPI(endpoint: "trending/movie/day") { movies in
+            self.trendingMovies = movies
+          }
+      fetchFromAPI:
+        endpoint: String
+        completion: ([Movie]) -> Void
+        urlString: "https://api.themoviedb.org/3/\(endpoint)?api_key=\(apiKey)&language=fr-FR"
+        guard: URL(string: urlString)
+        URLSession.shared.dataTask: 
+          - guard: data
+          - error: nil
+          do:
+            - decodedResponse: try JSONDecoder().decode(MovieResponse.self, from: data)
+            - DispatchQueue.main.async:
+                - completion: decodedResponse.results
+          catch:
+            - print: "Erreur JSON : \(error)"
+      toggleDarkMode: 
+        - isDarkMode.toggle()
+      isDarkModeEnabled: 
+        return: isDarkMode
+
+# MARK: - Vue Principale avec onglet "Tendances"
+MainView:
+  View:
+    StateObject: MovieViewModel
+    body:
+      TabView:
+        - MoviesListView()
+          tabItem: Label("Films", systemImage: "film")
+        - TrendingMoviesView() # Nouvelle section tendances
+          tabItem: Label("Tendances", systemImage: "flame")
+        - FavoritesView()
+          tabItem: Label("Favoris", systemImage: "heart.fill")
+        - WatchLaterView()
+          tabItem: Label("À voir plus tard", systemImage: "clock")
+        - SettingsView() # Ajout des réglages
+          tabItem: Label("Réglages", systemImage: "gear")
+      preferredColorScheme: viewModel.isDarkModeEnabled ? .dark : .light # Mode sombre
+
+# MARK: - Section Tendances
+TrendingMoviesView:
+  View:
+    StateObject: MovieViewModel
+    body:
+      NavigationView:
+        List: viewModel.trendingMovies
+          NavigationLink:
+            destination: MovieDetailView(movie: movie, viewModel: viewModel)
+            MovieRow(movie: movie, viewModel: viewModel)
+      navigationTitle: "🔥 Tendances"
+
+# MARK: - Vue Réglages (Mode Sombre)
+SettingsView:
+  View:
+    ObservedObject: MovieViewModel
+    body:
+      NavigationView:
+        Form:
+          Toggle: "🌙 Mode sombre"
+          isOn: 
+            Binding:
+              get: viewModel.isDarkModeEnabled
+              set: { _ in viewModel.toggleDarkMode() }
+      navigationTitle: "⚙️ Réglages"
+
+# MARK: - Point d’entrée de l’application
+MovieApp:
+  App:
+    body:
+      Scene:
+        WindowGroup:
+          MainView()
